@@ -15,31 +15,55 @@ const ArtworkTable = () => {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
 
-  // 🔑 persistent selection
+  // persistent selection
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [deselectedIds, setDeselectedIds] = useState<Set<number>>(new Set());
 
+  // 🔑 bulk selection intent
+  const [bulkRemaining, setBulkRemaining] = useState(0);
+
   const overlayRef = useRef<OverlayPanel>(null);
 
+  // fetch data (server-side pagination)
   useEffect(() => {
-    let isMounted = true;
-
+    let alive = true;
     setLoading(true);
+
     fetchArtworks(page)
       .then(res => {
-        if (!isMounted) return;
+        if (!alive) return;
         setArtworks(res.data);
         setTotalRecords(res.pagination.total);
       })
-      .catch(console.error)
       .finally(() => {
-        if (isMounted) setLoading(false);
+        if (alive) setLoading(false);
       });
 
     return () => {
-      isMounted = false;
+      alive = false;
     };
   }, [page]);
+
+  // ✅ apply bulk selection SAFELY per page
+  useEffect(() => {
+    if (bulkRemaining <= 0 || artworks.length === 0) return;
+
+    const newSelected = new Set(selectedIds);
+    let remaining = bulkRemaining;
+
+    for (const art of artworks) {
+      if (remaining <= 0) break;
+      if (!newSelected.has(art.id)) {
+        newSelected.add(art.id);
+        remaining--;
+      }
+    }
+
+    if (remaining !== bulkRemaining) {
+      setSelectedIds(newSelected);
+      setBulkRemaining(remaining);
+    }
+  }, [artworks, bulkRemaining, selectedIds]);
 
   const handleSelectionChange = (selectedRows: Artwork[]) => {
     const newSelected = new Set(selectedIds);
@@ -77,9 +101,7 @@ const ArtworkTable = () => {
 
       <OverlayPanel ref={overlayRef}>
         <RowSelectOverlay
-          artworks={artworks}
-          selectedIds={selectedIds}
-          setSelectedIds={setSelectedIds}
+          setBulkRemaining={setBulkRemaining}
         />
       </OverlayPanel>
 
